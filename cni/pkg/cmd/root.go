@@ -261,7 +261,7 @@ func constructConfig() (*config.Config, error) {
 		K8sNodeName:        os.Getenv("KUBERNETES_NODE_NAME"),
 
 		CNIBinSourceDir:   constants.CNIBinDir,
-		CNIBinTargetDirs: []string{constants.HostCNIBinDir},
+		CNIBinTargetDirs:  []string{constants.HostCNIBinDir},
 		MonitoringPort:    viper.GetInt(constants.MonitoringPort),
 		LogUDSAddress:     viper.GetString(constants.LogUDSAddress),
 		CNIEventAddress:   viper.GetString(constants.CNIEventAddress),
