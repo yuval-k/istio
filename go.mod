@@ -19,6 +19,7 @@ require (
 	github.com/census-instrumentation/opencensus-proto v0.4.1
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cheggaaa/pb/v3 v3.1.4
+	github.com/cilium/ebpf v0.12.3
 	github.com/cncf/xds/go v0.0.0-20231128003011-0fa0005c9caa
 	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.4.0
