@@ -122,6 +122,12 @@ require (
 )
 
 require (
+	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/opencontainers/runtime-spec v1.1.0-rc.2 // indirect
+)
+
+require (
 	cloud.google.com/go v0.111.0 // indirect
 	cloud.google.com/go/compute v1.23.3 // indirect
 	cloud.google.com/go/iam v1.1.5 // indirect
@@ -138,6 +144,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/cncf/udpa/go v0.0.0-20220112060539-c52dc94e7fbe // indirect
+	github.com/containerd/cgroups/v3 v3.0.3
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1 // indirect
 	github.com/containerd/typeurl/v2 v2.1.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect

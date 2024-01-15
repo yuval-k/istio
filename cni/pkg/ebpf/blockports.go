@@ -28,18 +28,45 @@ const (
 	LinkFolder     = "istio-ztunnel"
 )
 
-func LoadPrograms() error {
+type Loader struct {
+	BaseBpfDir string
+}
+
+func NewLoader(baseBpfDir string) (*Loader, error) {
+	if baseBpfDir == "" {
+		var err error
+		baseBpfDir, err = detectBpfFsPath()
+		if err != nil {
+			return nil, fmt.Errorf("detect bpf fs path: %w", err)
+		}
+	}
+
+	baseBpfDir = filepath.Join(baseBpfDir, LinkFolder)
+	if err := os.MkdirAll(baseBpfDir, 0755); err != nil {
+		return nil, fmt.Errorf("create link root: %w", err)
+	}
+
+	return &Loader{
+		BaseBpfDir: baseBpfDir,
+	}, nil
+}
+
+func (l *Loader) LoadPrograms() error {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return err
 	}
-	spec, err := LoadSpec(iptables.InpodMark, constants.DNSCapturePort, constants.ZtunnelInboundPort, constants.ZtunnelOutboundPort, constants.ZtunnelInboundPlaintextPort)
+	spec, err := LoadSpec(iptables.InpodMark, iptables.InpodMask, constants.DNSCapturePort, constants.ZtunnelInboundPort, constants.ZtunnelOutboundPort, constants.ZtunnelInboundPlaintextPort)
 	if err != nil {
 		return err
 	}
-	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{Programs: ebpf.ProgramOptions{
-		LogSize:  1024 * 1024 * 4,
-		LogLevel: ebpf.LogLevelInstruction,
-	}})
+	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
+		Maps: ebpf.MapOptions{
+			PinPath: l.BaseBpfDir,
+		},
+		Programs: ebpf.ProgramOptions{
+			LogSize:  1024 * 1024 * 4,
+			LogLevel: ebpf.LogLevelInstruction,
+		}})
 	if err != nil {
 		if log.DebugEnabled() {
 			var verr *ebpf.VerifierError
@@ -57,7 +84,7 @@ func LoadPrograms() error {
 		return fmt.Errorf("no programs")
 	}
 
-	return loadProgs(programV4, programV6)
+	return l.loadProgs(programV4, programV6)
 }
 
 type Programs struct {
@@ -65,7 +92,7 @@ type Programs struct {
 	BindV6Prog *ebpf.ProgramSpec
 }
 
-func LoadSpec(mark uint32, outport, inport, inplainport, dnsport uint16) (*ebpf.CollectionSpec, error) {
+func LoadSpec(mark uint32, mask uint32, outport, inport, inplainport, dnsport uint16) (*ebpf.CollectionSpec, error) {
 	coll, err := loadBlock_ztunnel_ports()
 	if err != nil {
 		return nil, err
@@ -95,6 +122,7 @@ func LoadSpec(mark uint32, outport, inport, inplainport, dnsport uint16) (*ebpf.
 	err = nil
 
 	err = errors.Join(err, set(data, dataSec.Vars, "ztunnel_mark", mark))
+	err = errors.Join(err, set(data, dataSec.Vars, "ztunnel_mask", mask))
 	err = errors.Join(err, set(data, dataSec.Vars, "ztunnel_outbound_port", outport))
 	err = errors.Join(err, set(data, dataSec.Vars, "ztunnel_inbound_port", inport))
 	err = errors.Join(err, set(data, dataSec.Vars, "ztunnel_inbound_plain_port", inplainport))
@@ -117,14 +145,12 @@ func GetProgsFromSpec(coll *ebpf.CollectionSpec) *Programs {
 }
 
 func set[T constraints.Integer](contents []byte, vars []btf.VarSecinfo, name string, value T) error {
-
 	for _, v := range vars {
 		if vt, ok := v.Type.(*btf.Var); ok {
 			if vt.Name == name {
 				if uintptr(v.Size) != reflect.TypeOf(value).Size() {
 					return fmt.Errorf("type mismatch")
 				}
-				// set the value.. TODO
 				buf := contents[v.Offset:]
 				if len(buf) < int(v.Size) {
 					return fmt.Errorf("not enough space")
@@ -143,22 +169,11 @@ func set[T constraints.Integer](contents []byte, vars []btf.VarSecinfo, name str
 	return fmt.Errorf("no such var %s", name)
 }
 
-func loadProgs(programV4, programV6 *ebpf.Program) error {
+func (l *Loader) loadProgs(programV4, programV6 *ebpf.Program) error {
 
-	bpfRoot, err := detectBpfFsPath()
-	if err != nil {
-		return fmt.Errorf("detect bpf fs path: %w", err)
-	}
 	cgroupPath, err := detectCgroupPath()
 	if err != nil {
 		return fmt.Errorf("detect cgroup path: %w", err)
-	}
-
-	pinLinkRoot := filepath.Join(bpfRoot, LinkFolder)
-
-	err = os.MkdirAll(pinLinkRoot, 0755)
-	if err != nil {
-		return fmt.Errorf("create link root: %w", err)
 	}
 
 	f, err := os.Open(cgroupPath)
@@ -177,7 +192,7 @@ func loadProgs(programV4, programV6 *ebpf.Program) error {
 			continue
 		}
 
-		err := loadProg(pinLinkRoot, f, name, prog)
+		err := loadProg(l.BaseBpfDir, f, name, prog)
 		if err != nil {
 			return err
 		}
@@ -252,14 +267,14 @@ func UpdateLink(pin string, prog *ebpf.Program) error {
 }
 
 func detectCgroupPath() (string, error) {
-	return detectPathByType("cgroup2")
+	return DetectPathByType("cgroup2")
 }
 
 func detectBpfFsPath() (string, error) {
-	return detectPathByType("bpf")
+	return DetectPathByType("bpf")
 }
 
-func detectPathByType(typ string) (string, error) {
+func DetectPathByType(typ string) (string, error) {
 	f, err := os.Open("/proc/mounts")
 	if err != nil {
 		return "", err
