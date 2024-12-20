@@ -539,7 +539,7 @@ func TestCollectionFetchNonExistThatGetsCreated(t *testing.T) {
 	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "foo1", Namespace: "defualt"}}
 	cmNns := types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}
 	Results := krt.NewCollection(pods, func(ctx krt.HandlerContext, i *corev1.Pod) *Result {
-		cm := krt.Fetch(ctx, configMaps, krt.FilterKey(cmNns.String()))
+		cm := krt.FetchOne(ctx, configMaps, krt.FilterKey(cmNns.String()))
 		return &Result{
 			Named:     NewNamed(i),
 			HasConfig: cm != nil,
