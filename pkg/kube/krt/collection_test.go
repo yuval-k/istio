@@ -20,6 +20,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	istioclient "istio.io/client-go/pkg/apis/networking/v1"
 	"istio.io/istio/pkg/config"
@@ -517,4 +518,42 @@ func TestCollectionMultipleFetch(t *testing.T) {
 
 	cc.Delete("foo1", "")
 	assert.EventuallyEqual(t, fetcherSorted(Results), []Result{{NewNamed(pod), nil}})
+}
+
+func TestCollectionFetchNonExistThatGetsCreated(t *testing.T) {
+	stop := test.NewStop(t)
+	opts := KrtOptions{stop}
+	type Result struct {
+		Named
+		HasConfig bool
+	}
+	c := kube.NewFakeClient()
+	kpc := kclient.New[*corev1.Pod](c)
+	kcc := kclient.New[*corev1.ConfigMap](c)
+	pc := clienttest.Wrap(t, kpc)
+	cc := clienttest.Wrap(t, kcc)
+	pods := krt.WrapClient[*corev1.Pod](kpc, opts.WithName("Pods")...)
+	configMaps := krt.WrapClient[*corev1.ConfigMap](kcc, opts.WithName("ConfigMaps")...)
+	c.RunAndWait(stop)
+
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "foo1", Namespace: "defualt"}}
+	cmNns := types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}
+	Results := krt.NewCollection(pods, func(ctx krt.HandlerContext, i *corev1.Pod) *Result {
+		cm := krt.Fetch(ctx, configMaps, krt.FilterKey(cmNns.String()))
+		return &Result{
+			Named:     NewNamed(i),
+			HasConfig: cm != nil,
+		}
+	}, opts.WithName("Results")...)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "name",
+			Namespace: "namespace",
+		},
+	}
+	pc.Create(pod)
+	assert.EventuallyEqual(t, fetcherSorted(Results), []Result{{NewNamed(pod), false}})
+	cc.Create(cm)
+	assert.EventuallyEqual(t, fetcherSorted(Results), []Result{{NewNamed(pod), true}})
 }
