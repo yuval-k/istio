@@ -34,7 +34,7 @@ func main(){
 	go func(){
 		defer close(done)
 		goMain()
-	}
+	}()
 	<-done
 }
 
