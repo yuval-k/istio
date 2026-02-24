@@ -19,12 +19,27 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"runtime"
 
 	"istio.io/istio/cni/pkg/cmd"
 	"istio.io/istio/pkg/log"
 )
 
-func main() {
+func init(){
+	runtime.LockOSThread()
+}
+
+func main(){
+	done := make(chan struct{})
+	go func(){
+		defer close(done)
+		goMain()
+	}
+	<-done
+}
+
+
+func goMain() {
 	// Create context that cancels on termination signal
 	ctx, cancel := context.WithCancel(context.Background())
 	sigChan := make(chan os.Signal, 1)
